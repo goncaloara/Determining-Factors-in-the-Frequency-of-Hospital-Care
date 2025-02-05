@@ -1,0 +1,1010 @@
+---
+title: "Fatores determinantes na frequência de cuidados hospitalares"
+subtitle: "Análise de Modelos de Poisson"
+author: "Gonçalo Araújo"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+  word_document:
+    toc: true
+    toc_depth: 2
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include= FALSE}
+knitr::opts_chunk$set(echo = TRUE, width = 70)
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(knitr.include.path = FALSE)
+```
+
+\newpage
+
+Declaro que o presente relatório é de minha autoria e não foi utilizado
+previamente noutro curso ou unidade curricular, desta ou de outra
+instituição. As referências a outros autores (afirmações, ideias,
+pensamentos) respeitam escrupulosamente as regras da atribuição, e
+encontram-se devidamente indicadas no texto e nas referências bibliográ-
+ficas, de acordo com as normas de referenciação. Tenho consciência de
+que a prática de plágio e auto-plágio constitui um ilícito académico.
+
+\newpage
+
+# [**Introdução**]{.underline} {#introduction}
+
+O acesso e frequência de cuidados de saúde são questões críticas, já que
+funcionam como indicadores não só da saúde da população, mas também dos
+fatores que contribuem para a sua utlização. Diversos fatores podem
+contribuir para uma maior ou menor frequência de hospitais ou centros de
+saúde, incluindo aspectos demográficos, socioeconómicos e, naturalmente,
+questões relacionadas com a saúde e a posse de seguros. Estes
+determinantes são cruciais para os responsáveis pelas políticas públicas
+que procuram otimizar os recursos de saúde, melhorar a acessibilidade e
+combater as desigualdades na prestação de cuidados médicos.
+
+Este estudo foca-se na análise dos fatores que podem determinar o número
+de visitas ao hospital entre indivíduos com 66 anos ou mais. Ao examinar
+variáveis como estado de saúde, número de condições crónicas, idade,
+género, rendimento e cobertura de seguros, este trabalho procura
+fornecer informações sobre os padrões e preditores da utilização
+hospitalar.
+
+A análise deste projeto baseia-se no dataset "NMES1988", do package
+"AER". Este dataset inclui dados do US National Medical Expenditure
+Survey (1987-1988), relativos a individuos com 66 anos ou mais admitidos
+em instalações de cuidados de saúde, tornando-o um recurso ideal para
+explorar os fatores associados à utilização de cuidados de saúde nesta
+faixa etária.
+
+Especificamente, este projeto pretende:
+
+1.  Analisar a relação entre características individuais (incluindo
+    estado de saúde, condições crónicas, idade e género) e a frequência
+    de visitas hospitalares.
+
+2.  Realizar uma análise exploratória de dados (EDA) para identificar
+    padrões e auxiliar visualmente a compreensão da distribuição das
+    visitas hospitalares entre a população idosa.
+
+3.  Desenvolver e implementar um modelo de regressão de Poisson para
+    quantificar os efeitos destes vários fatores na frequência de
+    visitas hospitalares.
+
+Estas análises contribuirão para a nossa compreensão dos padrões de
+utilização dos cuidados de saúde entre adultos idosos e poderão ser a
+base de decisões políticas destinadas a otimizar a prestação de cuidados
+de saúde e a alocação de recursos para este grupo demográfico crescente.
+Neste projeto foi utilizado o software R para a exploração dos dados e
+análise estatistica e R Markdown para a escrita deste relatório. O
+ficheiro foi renderizado em PDF utilizando o Knitr.
+
+[Go back to Top](#introduction)
+
+# [**Dataset**]{.underline} {#dataset}
+
+## Pré-processamento dos dados
+
+Tal como fora mencionado, o dataset utilizado "NMES1988" foi construido
+pelo departamento de "Pesquisa Nacional de Despesas Médicas dos EUA" (US
+National Medical Expenditure Survey), que engloba informações
+demográficas, socioeconicas e de saúde sobre diversos pacientes que
+acederam a centros saúde. O dataset original engloba 19 variáveis, no
+entanto para este trabalho foram selecionadas apenas 7, uma variável
+resposta e 2 variáveis para cada um dos possíveis fatores determinantes
+(demográficos, económicos e saúde). Entre as quais:
+
+-   **visits:** variável de resposta, representa o número de vezes um
+    dado paciente acedeu a hospitais.
+
+-   **health:** variável categórica com 3 fatores ("excellent",
+    "[average]{.underline}" - referência, e "poor"), representa o estado
+    de saúde sob a percecão dos pacientes.
+
+-   **chronic:** neste trabalho foi tratada como uma variável contínua e
+    representa o número de condições crónicas dos pacientes.
+
+-   **age:** neste trabalho foi tratada como uma variável contínua e
+    representa a idade dos pacientes, em anos. Foi multiplicada por 10,
+    para facilitar a interpretação, dado que no dataset original, esta
+    fora dividida por 10.
+
+-   **gender:** variável binária ("male" e "[female]{.underline}" -
+    referência, representa o sexo dos pacientes.
+
+-   **income:** variável contínua e representa o rendimento familiar dos
+    pacientes , dividida por 10 000 USD.
+
+-   **insurance:** variável binária ("yes" e "[no]{.underline}" -
+    referência), representa se os pacientes têm ou não seguro de saúde.
+
+Após verificar que não existem valores nulos, o dataframe atualizado e a
+sua estrutura das variáveis de interesse são as seguintes:
+
+```{r include=FALSE}
+library(AER)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(dplyr)
+library(faraway)
+library(MASS)
+library(kableExtra)
+library(knitr)
+
+data("NMES1988")
+
+datase <- NMES1988[, !(names(NMES1988) %in% c("nvisits", "ovisits",
+                                              "novisits","emergency","hospital","adl", "region","afam","married", 
+"school", "employed","medicaid"))]
+            
+datase$age <- datase$age*10
+
+```
+
+```{r echo=FALSE}
+
+head_df <- head(datase)
+
+kable(head_df, 
+      format = "latex", 
+      caption = "Primeiras observações do dataset",
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                font_size = 10,
+                position = "center")
+
+
+summary_df <- data.frame(
+  Data_Type = sapply(datase, class),
+  Unique_Count = sapply(datase, function(x) length(unique(x))), 
+  row.names = names(datase)
+)
+
+kable(summary_df, 
+      format = "latex", 
+      caption = "Sumário das variáveis de interesse",
+      booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                font_size = 10,
+                position = "center") %>%
+  column_spec(1, bold = TRUE, color = "blue")
+
+```
+
+## Análises Univariadas
+
+Foram realizadas análises univariadas de todas as variáveis de interesse
+deste estudo. Devido a restrições de espaço, apenas algumas
+representações gráficas foram incluidas neste relatório. Contudo, todas
+elas estão no script do R.
+
+### Acessos a cuidados hospitalares
+
+Relativamente à principal variável de interesse neste trabalho, visto
+que apresenta uma distribuição assimétrica, foi calculada a mediana:
+4,mínimo: 0 e máximo: 89.
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+histogram <- ggplot(datase, aes(x = visits)) + 
+  geom_histogram(binwidth = 4, fill = "steelblue3", color = "black")+
+  labs(title = NULL,
+       x = "Idas ao hospital", y = "Frequência") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot <- ggplot(datase, aes(x = NULL, y = visits)) +
+  geom_boxplot(fill = "steelblue3") +
+  labs(title = NULL, x = "", 
+       y = "Idas ao hospital" ) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(
+  histogram, boxplot,
+  ncol = 2,
+  top = textGrob(
+    "Número de idas ao hospital",
+    gp = gpar(fontsize = 14, fontface = "bold")
+  )
+)
+
+```
+
+### Estado de saúde e número de condições crónicas dos pacientes
+
+Relativamente às variáveis inseridas nos determinantes de saúde, foram
+construídos gráficos apropriados ("pie chart" e histograma). Para o
+estado de sáude, visto tratar-se de uma variável catégorica, a
+frequência relativa (em percentagem) para cada uma dos fatores foi
+obtida: dos pacientes, 79.6% consideram ter uma saúde "average", 7.8%
+consideram ter uma saúde "excellent" e 12.6%, uma saúde "poor". Sobre o
+número de condições crónicas, como apresenta uma distribuição
+assimétrica, a mediana (1), mínimo (0) e máximo (8) foram calculados.
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+freq_dist2 <- table(datase$health)
+relative_freq2 <- prop.table(freq_dist2)
+
+freq_table2 <- data.frame(
+  Health = names(freq_dist2),
+  Frequency = as.integer(freq_dist2),
+  Relative_Frequency = round(as.numeric(relative_freq2), 4))
+
+saude2 <- ggplot(freq_table2, aes(x = "", y = Relative_Frequency, fill = Health)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(title = NULL) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_blank()
+  ) +
+  geom_text(aes(label = paste0(round(Relative_Frequency * 100, 1), "%")), 
+            position = position_stack(vjust = 0.5), size = 3)
+
+histogram4 <- ggplot(datase, aes(x = chronic)) +
+  geom_histogram(binwidth = 1, fill = "firebrick3", color = "black")+
+  labs(title = NULL, x = "Número de doenças crónicas", y = "Frequencia") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(
+  saude2, histogram4, 
+  ncol = 2, 
+  top = textGrob("Fatores de saúde dos pacientes",
+                 gp = gpar(fontsize = 14, fontface = "bold"))
+)
+```
+
+### Posse de seguro e rendimento dos pacientes
+
+Sobre os fatores económicos, também foi construido um "pie chart" e
+histograma para a variável categórica e contínua, respetivamente.
+Relativamente à posse de seguros, 77.6% dos pacientes apresenta seguro
+de saúde, enquanto que 22.4% não possuem. Dado que também o rendimento
+apresenta uma distribuição assimétrica, a mediana (1.69), mínimo (-1.01)
+e máximo (54.84) foram calculados.
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+freq_dist3 <- table(datase$insurance)
+relative_freq3 <- prop.table(freq_dist3)
+
+freq_table3 <- data.frame(
+  Insurance = names(freq_dist3),
+  Frequency = as.integer(freq_dist3),
+  Relative_Frequency = round(as.numeric(relative_freq3), 4))
+
+seguro2 <- ggplot(freq_table3, aes(x = "", y = Relative_Frequency, fill = Insurance)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(title = NULL) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_blank()
+  ) +
+  geom_text(aes(label = paste0(round(Relative_Frequency * 100, 1), "%")), 
+            position = position_stack(vjust = 0.5), size = 3)
+
+histogram3 <- ggplot(datase, aes(x = income)) +
+  geom_histogram(binwidth = 6, fill = "khaki3", color = "black") +
+  labs(title = NULL, x = "Rendimento", y = "Frequencia") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(
+  seguro2,histogram3, 
+  ncol = 2,  
+  top = textGrob("Fatores económicos dos pacientes",
+                 gp = gpar(fontsize = 14, fontface = "bold"))
+)
+```
+
+### Sexo e idade dos pacientes
+
+Por último, os fatores demográficos. 59.65% dos pacientes são do sexo
+feminino e 40.35% dos pacientes são do sexo masculino. Sobre a idade dos
+pacientes, esta também apresentou uma distribuição não simétrica, por
+isso foi também analisada a mediana: 73, mínima: 66 e máximo: 109.
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+freq_dist <- table(datase$gender)
+relative_freq <- prop.table(freq_dist)
+
+freq_table <- data.frame(
+  Gender = names(freq_dist),
+  Frequency = as.integer(freq_dist),
+  Relative_Frequency = round(as.numeric(relative_freq), 4))
+
+sexo2 <- ggplot(freq_table, aes(x = "", y = Relative_Frequency, fill = Gender)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = c("male" = "darkgreen", "female" = "darkgray")) +
+  labs(title = NULL) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.title = element_blank()) +
+  geom_text(aes(label = paste0(round(Relative_Frequency * 100, 2), "%")), 
+            position = position_stack(vjust = 0.5), size = 4)
+
+histogram2 <- ggplot(datase, aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "pink3", color = "black") +
+  labs(title = NULL, x = "Idade", y = "Frequencia") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(
+  sexo2, histogram2, 
+  ncol = 2,
+  top = textGrob("Fatores demográficos dos pacientes",
+                 gp = gpar(fontsize = 14, fontface = "bold"))
+)
+```
+
+## Análises Bivariadas
+
+Foram realizadas análises bivariadas da variável resposta em relação a
+todas as outras restantes variáveis. Uma vez mais, devido a restrições
+de espaço, apenas algumas representações gráficas foram incluidas neste
+relatório. No entanto, todas elas estão no script do R.
+
+### Variável resposta vs variáveis contínuas
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+biv_plot2 <- ggplot(datase, aes(x = income, y = visits)) +
+  geom_point(color = "khaki3", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Idas ao hospital vs Rendimento",
+       x = "Rendimento",
+       y = "Número de idas") +
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+biv_plot3 <- ggplot(datase, aes(x = chronic, y = visits)) +
+  geom_point(color = "firebrick3", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  labs(title = "Idas ao hospital vs Nºcondições crónicas",
+       x = "Número de condições crónicas",
+       y = "Número de idas") +
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+grid.arrange(
+  biv_plot2, biv_plot3, 
+  ncol = 2
+)
+```
+
+Relativamente ao gráfico da esquerda (idas ao hospital vs rendimento),
+observa-se uma maior "concentração" de idas ao hospital em individuos
+com rendimentos mais baixos. No entanto, o rendimento não parece ser um
+fator determinante nas idas ao hospital, já que a linha de tendência é
+praticamente horizontal. Sobre o gráfico da direita (idas ao hospital vs
+número de condições crónicas), esta variável aparenta ter uma maior
+influência na frequência a cuidados hospitalares, já que há medida que o
+número de condições crónicas aumenta, o número de idas ao hospital
+também aumenta. Disto, podemos concluir que o foco na gestão e prevenção
+de condições crónicas pode ser mais eficaz para reduzir as idas ao
+hospital do que intervenções baseadas no rendimento.
+
+### Variável resposta vs variáveis categóricas
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+stats_health <- datase %>%
+  group_by(health) %>%
+  summarise(
+    median_visits = median(visits, na.rm = TRUE),
+    min_visits = min(visits, na.rm = TRUE),
+    max_visits = max(visits, na.rm = TRUE)
+  )
+
+boxplot_saude <- ggplot(datase, aes(x = health, y = visits, fill = health)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("excellent" = "#4CAF50", 
+                               "poor" = "#2196F3",        
+                               "average" = "#FF69B4")) +  
+  geom_text(data = stats_health, 
+            aes(x = health, 
+                y = max(datase$visits) - 50, 
+                label = paste0("Med: ", median_visits, 
+                               "\nMin: ", min_visits, 
+                               "\nMax: ", max_visits)), 
+            hjust = 0.6, 
+            size = 3, 
+            color = "black", 
+            nudge_x = 0.3) +
+  labs(
+    title = "Idas ao hospital vs Estado de saúde",
+    x = "Estado de saúde",
+    y = "Número de idas",
+    fill = "Estado de saúde"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "none"
+  )
+
+stats_insurance <- datase %>%
+  group_by(insurance) %>%
+  summarise(
+    median_visits2 = median(visits, na.rm = TRUE),
+    min_visits2 = min(visits, na.rm = TRUE),
+    max_visits2 = max(visits, na.rm = TRUE)
+  )
+
+boxplot_insurance <- ggplot(datase, aes(x = insurance, y = visits, fill = insurance)) +
+  geom_boxplot() +
+  geom_text(data = stats_insurance, aes(x = insurance, y = max(datase$visits) - 50, 
+                                     label = paste0("Med: ", median_visits2, "\nMin: ", min_visits2, "\nMax: ", max_visits2)), 
+            hjust = 0.6, size = 3, color = "black", nudge_x = 0.3) +
+  labs(
+    title = "Idas ao hospital vs Seguro de saúde",
+    x = "Seguro de saúde",
+    y = "Número de idas",
+    fill = "Seguro de saúde"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "none"
+  )
+
+grid.arrange(
+  boxplot_saude, boxplot_insurance, 
+  ncol = 2
+)
+```
+
+Sobre o gráfico da esquerda, (idas ao hospital vs estado de saúde),
+existe uma relação negativa entre o estado de saúde e o número de idas
+ao hospital, ou seja, à medida que o estado de saúde melhora (de "poor"
+para "excellent"), o número de idas ao hospital tende a ser também
+menor. Relativamente ao gráfico da direita, (idas ao hospital vs seguro
+de saúde) observa-se que possuir seguro de saúde parece estar associado
+a um maior número de idas ao hospital. Isso pode ser explicado pela
+redução de entraves financeiros para usufruir de atendimento médico,
+enquanto que pessoas sem seguro podem restringir o número de idas ao
+hospital por questões de custo.
+
+## Análises Multivariadas
+
+Foram realizadas diversas análises multivariadas (incluindo matrizes de
+correlação) relativamente à variável dependente. Porém, e uma vez mais,
+devido a restrições de espaço, apenas algumas representações gráficas
+foram incluidas neste relatório. No entanto, todas elas estão no script
+do R.
+
+```{r include=FALSE}
+plot_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    plot.margin = margin(10, 10, 10, 10)
+  )
+
+
+breaks_chronic <- c(0, 2, 4, 6, 8)
+labels_chronic <- c("0-2", "3-4", "5-6", "7-8")
+
+breaks_age <- c(65, 71, 76, 81, 86, 91, 96, 101, 106, 111)
+labels_age <- c("65 to 70", "71 to 75", "76 to 80", "81 to 85", 
+                "86 to 90", "91 to 95", "96 to 100", "101 to 105", "106 to 110")
+
+breaks_income <- c(-5, 6, 16, 26, 36, 46, 56, 61)
+labels_income <- c("-5 to 5", "6 to 15", "16 to 25", "26 to 35", 
+                   "36 to 45", "46 to 55", "56 to 60")
+
+
+create_plot <- function(data, x_var, fill_var, title, breaks_x, labels_x) {
+  data %>%
+    mutate(
+      x_category = cut(.data[[x_var]], breaks = breaks_x, labels = labels_x, right = TRUE, include.lowest = TRUE)
+    ) %>%
+    ggplot(aes(x = x_category, y = visits, fill = .data[[fill_var]])) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = title,
+      x = paste(tools::toTitleCase(gsub("_", " ", x_var))),
+      y = "Idas ao hospital",
+      fill = tools::toTitleCase(gsub("_", " ", fill_var))
+    ) +
+    plot_theme
+}
+```
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+mult2 <- create_plot(datase, "income", "insurance", "vs rendimento e seguro de saúde",breaks_income, labels_income) 
+
+mult4 <- create_plot(datase, "chronic", "health", "vs condições crónicas e saúde",breaks_chronic, labels_chronic) +
+  scale_fill_manual(values = c("excellent" = "#4CAF50", 
+                               "poor" = "#2196F3",        
+                               "average" = "#FF69B4"))  
+
+grid.arrange(
+  mult2, mult4, 
+  ncol = 2
+)
+  
+```
+
+Relativamente ao primeiro gráfico, as pessoas com rendimentos mais
+baixos (-5 to 5) têm um número maior de idas ao hospital. No entanto, à
+medida que o rendimento aumenta, a diferença entre ter ou não ter seguro
+diminui, tal como o número de idas ao hospital. Sobre o segundo gráfico,
+existe uma clara relação entre o número de condições crónicas e idas ao
+hospital, já que individuos com saúde considerada "poor" tendem a ir
+mais ao hospital, e pessoas com saúde "excellent" geralmente têm menos
+idas ao hospital. Para além disso, à medida que o número de condições
+crónicas aumenta (7-8), o estado de saúde auto-reportado tem menos
+impacto nas idas ao hospital.
+
+Os dois gráficos mostram que acesso aos serviços de saúde por posse de
+seguro e estado de saúde combinado com comorbidades são fatores críticos
+que influenciam o número de idas ao hospital. Por isso, politicas que
+visam melhorar o acesso ao seguro de saúde para as populações com baixos
+rendimentos e investir em cuidados preventivos para reduzir o impacto
+das condições crônicas, especialmente em pacientes já vulneráveis em
+termos de estado de saúde, poderão ser importantes para reduzir o número
+de idas ao hospital.
+
+### Matriz de correlação (heatmap)
+
+```{r echo=FALSE,fig.width=5, fig.height=3, fig.align='center'}
+correlation_data <- datase[, c("visits","age","chronic", "income")]
+
+
+correlation_matrix <- round(cor(correlation_data, use = "complete.obs", method = "spearman"), 2)
+
+
+correlation_matrix_df <- as.data.frame(as.table(correlation_matrix))
+
+
+correlation_matrix_df$fill_value <- correlation_matrix_df$Freq
+diag_indices <- which(correlation_matrix_df$Var1 == correlation_matrix_df$Var2)
+correlation_matrix_df$fill_value[diag_indices] <- NA
+correlation_matrix_df$label <- as.character(correlation_matrix_df$Freq)
+correlation_matrix_df$label[diag_indices] <- "--"
+
+heatmap_plot <- ggplot(correlation_matrix_df, aes(x = Var1, y = Var2, fill = fill_value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = label), color = "black", size = 4) +
+  scale_fill_gradient2(
+    low = "blue", high = "red", mid = "white", midpoint = 0, 
+    limit = c(-1, 1), space = "Lab", name = "Pearson",
+    na.value = "grey90"  
+  ) +
+  labs(title = "Matriz de correlação: variáveis contínuas", x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+print(heatmap_plot)
+```
+
+Desta matriz destaca-se que:
+
+-   **visits vs chronic**: correlação positiva moderada (**0.34**): Isso
+    sugere que indivíduos com um maior número de condições crônicas têm
+    uma maior tendência a visitar o hospital. Este é um resultado
+    esperado, dado que condições crônicas frequentemente exigem mais
+    cuidados médicos.
+
+-   **visits vs age**: correlação próxima de zero (**0.05**): A idade
+    não parece influenciar diretamente o número de idas ao hospital.
+
+-   **visits vs income**: sem correlação (**0**).
+
+# [**Análise de modelos de Poisson**]{.underline}
+
+## Escolha do modelo
+
+O primeiro modelo a ser analisado foi aquele com todas as variáveis.
+Após observar o "summary" desse modelo, é vísivel que a variável
+**"income"** é a única com um *p-value* superior a 0.05.
+
+```{r echo=TRUE}
+mod_full <- glm(visits~.,data = datase, family = "poisson")
+```
+
+```{r echo=FALSE,fig.width=5, fig.height=3, fig.align='center'}
+coef(summary(mod_full)) %>%
+  as.data.frame() %>%
+  mutate(`Pr(>|z|)` = formatC(`Pr(>|z|)`, format = "e", digits = 2)) %>%
+  kable(format = "latex", 
+        caption = "Sumário do modelo com todas as variáveis") %>% 
+  kable_styling(font_size = 7, 
+                full_width = FALSE, 
+                latex_options = "hold_position")
+```
+
+\newpage
+
+Na sequência da análise, desenvolvi um novo modelo de regressão de
+Poisson excluindo a variável "income" e procedi à comparação com o
+modelo original através de três critérios principais: teste de razão de
+verossimilhanças (likelihood ratio test), AIC (Critério de Informação de
+Akaike) e pseudo R². O teste de razão de verossimilhanças resultou num
+*p-value* superior a 0.05, não rejeitando assim a hipótese nula de que
+os modelos apresentam ajustamentos estatisticamente equivalentes. Este
+resultado sugere que podemos optar pelo modelo mais pequeno ou seja,
+aquele sem a variável "income". Quanto aos restantes critérios, o novo
+modelo apresentou um AIC ligeiramente superior e um pseudo R²
+marginalmente inferior. Apesar destas pequenas diferenças, a decisão de
+selecionar o modelo sem a variável "income" é reforçada pela análise
+gráfica preliminar, que já indicava que o rendimento não seria um
+preditor relevante para o número médio esperado de idas ao hospital.
+
+```{r include=FALSE}
+mod_noincome <- update(mod_full,.~.-income)
+```
+
+```{r echo=FALSE,fig.width=5, fig.height=3, fig.align='center'}
+coef(summary(mod_noincome)) %>%
+  as.data.frame() %>%
+  mutate(`Pr(>|z|)` = formatC(`Pr(>|z|)`, format = "e", digits = 2)) %>%
+  kable(format = "latex", 
+        caption = "Sumário do modelo sem a variável income") %>% 
+  kable_styling(font_size = 7, 
+                full_width = FALSE, 
+                latex_options = "hold_position")
+```
+
+Considerando que todos os preditores do novo modelo eram
+estatisticamente significativos para o número médio de visitas ao
+hospital, decidi avaliar outros modelos que incluiam interações.
+Desenvolvi modelos com as seguintes interações: *insurance\*age*,
+*gender\*chronic*, *gender\*age*, *healthage e insurancechronic.* Os
+três primeiros modelos apresentaram desempenho inferior ao melhor modelo
+até então (aquele sem a variável income), segundo os critérios de
+avaliação utilizados (teste de verossimilhança, AIC e pseudo R²).
+Contudo, os dois últimos modelos demonstraram melhor desempenho. O
+modelo com a interação *health\*age* apresentou resultados promissores
+inicialmente: no teste de verossimilhança obteve um *p*-valor inferior a
+0.05 (rejeitando-se assim a hipótese nula em favor do modelo com
+interação) e um pseudo R² superior ao modelo sem income. No entanto,
+este modelo teve que ser descartado posteriormente, pois a interação e
+outro preditor apresentaram um valor de multicolinearidade extremamente
+elevado (GVIF=19386.97). Após descartar este modelo, prossegui testando
+outras interações até chegar ao modelo com a interação
+*insurance\*chronic*.
+
+```{r echo=TRUE}
+mod_inter5 <- update(mod_noincome, .~. +insurance*chronic)
+```
+
+\newpage
+
+```{r echo=FALSE,fig.width=5, fig.height=3, fig.align='center'}
+coef(summary(mod_noincome)) %>%
+  as.data.frame() %>%
+  mutate(`Pr(>|z|)` = formatC(`Pr(>|z|)`, format = "e", digits = 2)) %>%
+  kable(format = "latex", 
+        caption = "Sumário do modelo com interação insurance*chronic") %>% 
+  kable_styling(font_size = 7, 
+                full_width = FALSE, 
+                latex_options = "hold_position")
+```
+
+Este apresentou uma performance superior em todos os critérios de
+avaliação quando comparado ao modelo sem a variável income:
+
+-   **Teste de verossimilhança:** p=8.451e-06, rejeitando-se assim a
+    hipótese nula em favor do modelo maior
+
+-   **AIC** menor: 36756 \< 36774
+
+-   **Pseudo R²** maior: 0.1105167 \> 0.1097806
+
+Com base nesses resultados, selecionei este como modelo final e procedi
+com o estudo do seu ajustamento (embora posteriormente tenha descoberto
+que este teria de sofrer uma alteração antes de ser de facto o modelo
+definitivo).
+
+Relativamente à qualidade do próprio modelo, eu procedi a uma avaliação
+dos seguintes parâmetros: residuos (residuals vs fitted), normalidade
+dos residuos, indepedencia das observações, outliers,
+multicolinearidade, e ainda sobredispersão. Começando pelos resíduos:
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+par(mfrow = c(1, 3))
+plot(fitted(mod_inter5), residuals(mod_inter5),
+     xlab="Fitted Values", ylab="Deviance Residuals", 
+     main="Residuos vs valores ajustados")
+abline(h=0, col="red",lwd=3)
+
+qqnorm(residuals(mod_inter5, type = "deviance"), 
+       main = "Q-Q Plot dos Residuos")
+qqline(residuals(mod_inter5, type = "deviance"), col="red", lwd=3)
+
+plot(residuals(mod_inter5,type="deviance"),main = "Serial plot dos Residuos",xlab = "Indice",ylab = "Residuals",type="o")
+```
+
+No gráfico de resíduos versus valores ajustados existe uma maior
+dispersão à medida que os valores ajustados aumentam. Isto, aliado à
+assimetria poderá sugerir uma sobredispersão nos dados, o que é uma
+violação no modelo de Poisson. O gráfico Q-Q demonstra desvios
+consideráveis da distribuição normal teórica, especificamente nos dois
+extremos. Por fim, o gráfico "serial plot" dos resíduos não apresenta
+padrões evidentes, sugerindo independência das observações.
+
+Devido a estes resultados, procedi à análise da sobredispersão do
+modelo, obtendo um valor de **phi-hat = 7.068**. Este valor é
+substancialmente superior a 1 (valor ideal na regressão de Poisson),
+indicando que neste modelo a variância é consideravelmente maior que a
+média - uma violação do modelo de Poisson. Em consequência deste
+resultado, optei por transformar este modelo para uma regressão binomial
+negativa, e estudar o seu ajustamento (**nota:** após transformar para
+binomial negativa e analisar o "summary" do modelo, deparei-me com o
+facto de que a variável **age** já não era estatisticamente significante
+para a variável resposta, portanto construi um novo modelo sem essa
+variável e comparei o AIC dos dois modelos, sendo o valor mais baixo,
+naquele sem **age**. Esse modelo foi então o meu modelo final). O meu
+modelo final pode ser expresso matematicamente como:
+
+```{=tex}
+\begin{equation}
+\log(\mu) = \beta_0 + \beta_1X_1 + \beta_2X_2 + \beta_3X_3 + \beta_4X_4 + \beta_5X_5 + \beta_6(X_3 \times X_5)
+\end{equation}
+```
+onde:
+
+$\mu = E(Y)$ é o número esperado de visitas $Y \sim NB(\mu, \theta)$,
+com $\theta = 1.153$ (parâmetro de dispersão)
+
+E onde: - $\beta_0 = 1.092$ (intercept) - $\beta_1 = 0.329$ (se health =
+poor, 0 caso contrário) - $\beta_2 = -0.351$ (se health = excellent, 0
+caso contrário) - $\beta_3 = 0.235$ (coeficiente para doenças
+crónicas) - $\beta_4 = -0.108$ (se gender = male, 0 caso contrário) -
+$\beta_5 = 0.425$ (se insurance = yes, 0 caso contrário) -
+$\beta_6 = -0.055$ (coeficiente de interação entre doenças crónicas e
+seguro).
+
+Ou na forma exponencial:
+
+```{=tex}
+\begin{equation}
+\mu = \exp(1.092 + 0.329X_1 - 0.351X_2 + 0.235X_3 - 0.108X_4 + 0.425X_5 - 0.055(X_3 \times X_5))
+\end{equation}
+```
+Sobre a qualidade de ajustamento do modelo, avaliei igualmente os
+resíduos (vs valores ajustados, a sua normalidade e independência),
+outliers e multicolinearidade. Iniciando, novamente pelos resíduos:
+
+```{r echo=FALSE,fig.width=8, fig.height=3, fig.align='center'}
+
+mod_nb <- glm.nb(visits ~ health + chronic + age + gender + insurance 
+                 + insurance:chronic, data = datase)
+mod_nb2 <- update(mod_nb,.~.-age)
+
+par(mfrow = c(1, 3))
+plot(fitted(mod_nb2), residuals(mod_nb2),
+     xlab="Fitted Values", ylab="Deviance Residuals", 
+     main="Residuos vs valores ajustados")
+abline(h=0, col="red",lwd=3)
+
+qqnorm(residuals(mod_nb2, type = "deviance"), 
+       main = "Q-Q Plot dos Residuos")
+qqline(residuals(mod_nb2, type = "deviance"), col="red", lwd=3)
+
+plot(residuals(mod_nb2,type="deviance"),main = "Serial plot dos Residuos",xlab = "Indice",ylab = "Residuals",type="o")
+```
+
+O gráfico de resíduos versus valores ajustados demonstra uma
+distribuição mais equilibrada dos resíduos em torno de zero. Embora
+ainda exista alguma dispersão nos valores mais elevados, esta é
+consideravelmente menor que a observada no modelo de Poisson, sugerindo
+que o modelo binomial negativo está a capturar melhor a variabilidade
+dos dados. O gráfico Q-Q apresenta uma "aderência" mais próxima à linha
+teórica normal. Os desvios nos extremos são menos pronunciados que no
+modelo anterior, indicando que a distribuição binomial negativa está a
+modelar de forma mais adequada os valores extremos . O gráfico "serial
+plot"dos resíduos mantém-se sem padrões temporais evidentes, confirmando
+a independência das observações. Estas evidências sugerem que a escolha
+do modelo binomial negativo foi apropriada para lidar com a
+sobredispersão previamente identificada, resultando num ajustamento mais
+adequado aos dados em análise.
+
+A multicolinearidade e os outliers, tal como fora referido também foram
+avaliados. Relativamente ao primeiro, não foram encontrados valores
+muito grandes (como anteriormente tinham sido observados), tendo sido o
+valor mais elevado da interação: **GVIF=** 5.0436 e o de preditor
+isolado: **GVIF=** 4.0800. Sobre os outliers, foi observado o seguinte:
+
+```{r echo=FALSE,fig.width=5, fig.height=3, fig.align='center'}
+
+cooks.distance2 <- cooks.distance(mod_nb2)
+plot(cooks.distance2, type = "h", main = "Cook's Distance", ylab = "Cook's distance")
+abline(h = 4/(nrow(data)-length(mod_nb2$coefficients)), col = "red")
+```
+
+É possível observar que algumas observações apresentam uma "distância"
+superior às restantes. Após criar um modelo excluindo essas observações
+e compará-lo com o modelo original, utilizando o critério AIC e o pseudo
+R², constatei que o modelo sem os outliers era superior. No entanto,
+optei por manter o modelo que incluía os outliers. A razão para essa
+escolha é que, como cada observação representa um paciente, mesmo
+valores extremados refletem situações reais que podem ocorrer novamente.
+Assim, considero importante que o modelo esteja preparado para
+incorporar essas eventuais situações.
+
+Concluí a análise deste modelo, com uma validação cruzada, obtendo um
+valor de RMSE (root mean squared error) = 6.47, signficando em média, as
+previsões do modelo desviam-se dos verdadeiros valores observados em
+aproximadamente 6,47 visitas hospitalares.
+
+## Qual é a previsão do modelo para a situação em que as variáveis contínuas tomam o valor das suas medianas e as variáveis categóricas estão todas na segunda categoria?
+
+Para esta previsão, foram consideradas as seguintes condições: mediana
+da variável chronic, healthpoor (segunda categoria), gendermale (segunda
+categoria), insuranceyes (segunda categoria) e a interação entre chronic
+e insurance. Assim, após calcular a mediana de chronic, incluir os
+coeficientes das segundas categorias e ajustar a interação
+(multiplicando o coeficiente da interação pela mediana de chronic),
+obtive o valor de 1,26065. Isso significa que o número previsto de idas
+ao hospital é dado por exp(1,26065) = 3,53. Portanto, considerando a
+mediana de chronic e assumindo que o indivíduo tem poor health, é do
+sexo masculino e possui seguro, além de contabilizar a interação entre
+chronic e insurance, o número esperado de visitas ao hospital é
+aproximadamente 4.
+
+## No modelo final, designe por X1 a primeira variável contínua que consta no preditor linear e por X2 a primeira variável categórica com mais de 2 categorias.
+
+Para as seguintes alíneas deste exercício, a variável **chronic** foi
+tratada como X1 e a variável **health** foi tratada como X2.
+
+### [Interprete os efeitos brutos e ajustados de X1 e X2.]{.underline}
+
+A análise dos efeitos "**chronic**" e de "**health**" no número de
+visitas hospitalares revelou associações significativas, tanto nos
+modelos brutos (sem considerar outras variáveis) como nos ajustados. No
+que diz respeito à variável **chronic**, observou-se que a cada
+incremento unitário desta variável está associada a um aumento de
+[25%]{.underline} nas visitas hospitalares (exp(0.22409)=1.25, p \<
+0.001) no modelo bruto, mantendo-se um efeito similar após ajuste
+(exp(0.23473)= 1.265, p \< 0.001).
+
+Quanto à variável **health**, utilizando como referência indivíduos com
+saúde *"average"* observou-se que pacientes com saúde considerada
+*"poor"* apresentaram um aumentode [61.4%]{.underline} nas visitas
+hospitalares, relativamente a individuos *healthaverage* no modelo bruto
+(exp(0.47904)= 1.614, p \< 0.001), efeito que foi atenuado após ajuste
+para [38.9%]{.underline} (exp(0.32870, p \< 0.001). Em contraste,
+indivíduos com saúde *"excellent"* demonstraram uma redução de
+[37.8%]{.underline} nas visitas (exp(-0.47455)= 0.622, p \< 0.001) no
+modelo bruto, e após ajuste, esta redução foi de 29.6% (exp(-0.35096)=
+0.704, p \< 0.001).
+
+É de destacar que o efeito de **"chronic"** permaneceu relativamente
+estável após o ajuste, indicando que sua influência nas visitas
+hospitalares é largamente independente de "health". Por outro lado, a
+atenuação de **"health"** após o ajuste sugere que outros preditores do
+modelo apresentam um impacto positivo nesta variável.
+
+### [Interprete o efeito provocado na resposta por uma mudança da segunda categoria de X2 para a terceira, e indique um intervalo de confiança a 95% para esse efeito.]{.underline}
+
+```{r echo=TRUE}
+efeito <- coef(mod_nb2)["healthexcellent"] - coef(mod_nb2)["healthpoor"]
+print(efeito)
+```
+
+O efeito calculado representa a diferença nos logaritmos da média do
+número esperado de visitas ao hospital quando a variável explicativa
+**health** muda da categoria *'poor*' para *'excellent'*. O valor obtido
+do efeito é: **-0.679662**. Este valor indica que, ao passar de
+'*healthpoor'* para '*healthexcellent*', há uma redução esperada de
+aproximadamente (exp(0.68)=1.97) 1.97 no número de visitas hospitalares,
+mantendo as restantes variáveis constantes. O intervalo de confiança
+calculado para o efeito é: [0.4362, 0.5888], que, como exclui o valor
+zero, sugere que este efeito é estatisticamente significativo na
+variável resposta, para um nível de confiança de 95% .
+
+### [Interprete o efeito provocado por um aumento em X1 correspondente a 15% da amplitude dos seus valores.]{.underline}
+
+```{r echo=TRUE}
+amplitude <- max(datase$chronic) - min(datase$chronic)
+delta_x <- 0.15 * amplitude
+```
+
+Para calcular o efeito provocado por um aumento em **chronic**​
+correspondente a 15% da amplitude dos seus valores, primeiro é
+necessário determinar a sua amplitude, ou seja, a diferença entre o
+valor máximo e o valor mínimo de chronic. De seguida, calcula-se o
+efeito multiplicando a amplitude por **1**5% dessa amplitude. Neste caso
+o efeito é igual a 1.2. Por outras palavras, este efeito corresponde à
+alteração do número de visitas hospitalares, com um aumento de 1.2
+unidades na variável **chronic**, mantendo as restantes variáveis
+constantes. Portanto , o efeito esperado na variável resposta seria
+(exp(1.2)=3.32). Em suma, um aumento de 15% da amplitude da variável
+**chronic** (ou seja, um aumento de 1.2 unidades), resulta num aumento
+do número esperado de visitas ao hospital de 3.32 vezes, assumindo que
+todas as outras variáveis do modelo permanecem constantes.
+
+### [Averigue a significância estatística da interação entre X1 e X2 no modelo final. Interprete os coeficientes obtidos, mesmo que não sejam estatisticamente significativos.]{.underline}
+
+Para avaliar como o efeito de "**chronic**" nas visitas hospitalares
+pode variar conforme a variável **"health"**, foi construido um novo
+modelo, com a função *update,* que incluia a interação
+*chronic\*health.*
+
+Os coeficientes foram avaliados: para indivíduos com saúde *"poor"*,
+observou-se uma interação negativa significativa com **"chronic"** (coef
+= -0.17728, p \< 0.001), sugerindo que o efeito de **chronic** nas
+visitas hospitalares é atenuado neste grupo em comparação com aqueles
+com saúde *"average*". Por outro lado, para indivíduos com saúde
+*"excellent"* embora se tenha observado uma interação positiva (coef =
+0.10175, p = 0.102), esta não era estatisticamente significativa.
+Contudo, os efeitos principais mantiveram-se significativos no modelo
+com interações, com as "**chronic**" apresentando um efeito positivo
+(coef= 0.27738, p \< 0.001), saúde *"poor"* mostrando um forte efeito
+positivo (coef = 0.76248, p \< 0.001), e saúde *"excellent"* mantendo um
+efeito negativo (coef = -0.41827, p \< 0.001) sobre o número esperado de
+visitas hospitalares.
+
+Após isso, foi realizado o teste de razão de verossimilhança, comparando
+os modelos com e sem interação (34.50, df = 2, p \< 3.22e-08) . Este
+indicou que a inclusão da interação melhora significativamente o ajuste
+do modelo.
+
+Por fim, a análise *drop1* corroborou a significância da interação entre
+**health** e **chronic** (p \< 2.985e-08), sugerindo que esta é uma
+componente importante para o modelo e no efeito do número esperado de
+visitas hospitalares.
+
+# [**Conclusões**]{.underline}
+
+Este estudo investigou os fatores determinantes na frequência de acesso
+a cuidados hospitalares, utilizando um modelo de regressão binomial
+negativa, devido à sobredispersão dos dados.  Este trabalho demonstrou
+que (por fatores):
+
+**Estado de Saúde e Condições Crônicas:**
+
+-   Indivíduos com saúde considerada fraca apresentaram um aumento
+    significativo nas visitas hospitalares.
+
+-   A presença de condições crônicas mostrou-se um preditor consistente
+    de maior utilização hospitalar.
+
+-   Foi identificada uma interação significativa entre estado de saúde e
+    condições crônicas, indicando que o impacto das condições crônicas
+    varia conforme o estado geral de saúde do paciente.
+
+**Fatores Socioeconómicos e Demográficos:**
+
+-   A presença de seguro de saúde mostrou-se associada a um maior número
+    de visitas.
+
+-   Observou-se uma diferença significativa entre gêneros, com homens
+    apresentando menor requência de visitas.
+
+-   O rendimento não é uma variável significativa.
+
+Estas descobertas têm implicações importantes para o planeamento de
+serviços de saúde e mesmo, políticas públicas, sugerindo a necessidade
+de abordagens diferenciadas baseadas no perfil de saúde dos pacientes e
+na presença de seguro médico. Estudos futuros poderiam explorar mais
+detalhadamente os mecanismos subjacentes a estas associações e
+investigar outros potenciais determinantes da utilização hospitalar.
