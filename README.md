@@ -6,7 +6,7 @@ The analysis in this project is based on the 'NMES1988' dataset from the 'AER' p
 
 Specifically, this project **aims** to:
 
-1. Analyze the relationship between individual characteristics (including health status, chronic conditions, age, and gender) and the frequency of hospital visits.
-2. Conduct an exploratory data analysis (EDA) to identify patterns and visually aid the understanding of the distribution of hospital visits among the elderly population.
+1. Analyze the relationship between individual characteristics (including health status, chronic conditions, age, and gender) and the frequency of hospital visits. /n
+2. Conduct an exploratory data analysis (EDA) to identify patterns and visually aid the understanding of the distribution of hospital visits among the elderly population. /n
 3. Develop and implement a Poisson regression model to quantify the effects of these various factors on the frequency of hospital visits
 
