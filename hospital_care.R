@@ -1,6 +1,5 @@
-# Trabalho Modelos Lineares Generalizados
+
 # Fatores determinantes na frequência de acesso a cuidados hospitalares
-# Gonçalo Araújo 15-01-2025
 
 # packages necessários
 
